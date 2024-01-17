@@ -1,0 +1,77 @@
+---
+version: "3.4"
+
+services:
+  postgresql:
+    image: elestio/postgres:15
+    restart: always
+    volumes:
+      - ./pgsql:/var/lib/postgresql/data
+    environment:
+      POSTGRES_PASSWORD: ${PG_PASS}
+      POSTGRES_USER: ${PG_USER}
+      POSTGRES_DB: ${PG_DB}
+    env_file:
+      - .env
+    ports:
+      - 172.17.0.1:47601:5432
+  redis:
+    image: elestio/redis:6.0
+    command: --save 60 1 --loglevel warning
+    restart: always
+    volumes:
+      - ./redis:/data
+  server:
+    image: elestio4test/authentik-server:${SOFTWARE_VERSION_TAG}
+    restart: always
+    command: server
+    environment:
+      AUTHENTIK_REDIS__HOST: redis
+      AUTHENTIK_POSTGRESQL__HOST: postgresql
+      AUTHENTIK_POSTGRESQL__USER: ${PG_USER}
+      AUTHENTIK_POSTGRESQL__NAME: ${PG_DB}
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${PG_PASS}
+    volumes:
+      - ./media:/media
+      - ./custom-templates:/templates
+    env_file:
+      - .env
+    ports:
+      - "172.17.0.1:9000:9000"
+    depends_on:
+      - postgresql
+      - redis
+  worker:
+    image: elestio4test/authentik-server:${SOFTWARE_VERSION_TAG}
+    restart: always
+    command: worker
+    environment:
+      AUTHENTIK_REDIS__HOST: redis
+      AUTHENTIK_POSTGRESQL__HOST: postgresql
+      AUTHENTIK_POSTGRESQL__USER: ${PG_USER}
+      AUTHENTIK_POSTGRESQL__NAME: ${PG_DB}
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${PG_PASS}
+    user: root
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./media:/media
+      - ./certs:/certs
+      - ./backups:/backups
+      - ./custom-templates:/templates
+    env_file:
+      - .env
+    depends_on:
+      - postgresql
+      - redis
+
+  pgadmin:
+    image: elestio/pgadmin:latest
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${ADMIN_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${ADMIN_PASSWORD}
+      PGADMIN_LISTEN_PORT: 8080
+    ports:
+      - "172.17.0.1:27287:8080"
+    volumes:
+      - ./servers.json:/pgadmin4/servers.json
